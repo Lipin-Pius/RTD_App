@@ -3,10 +3,14 @@ import { StyleSheet, TouchableOpacity, Text } from "react-native";
 
 function MaterialButtonDanger(props) {
   return (
+<<<<<<< HEAD
     <TouchableOpacity
     onPress={props.addButtonClick}
     style={[styles.container, props.style]}>
 
+=======
+    <TouchableOpacity style={[styles.container, props.style]}>
+>>>>>>> Added componets for the add button and the display card
       <Text style={styles.caption}>+</Text>
     </TouchableOpacity>
   );

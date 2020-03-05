@@ -3,22 +3,19 @@ import { StyleSheet, TouchableOpacity, View, Text } from "react-native";
 
 function Card(props) {
   return (
-    <TouchableOpacity 
-    onPress={() => props.onclickDevice(props.devID, props.nickname)}
-    style={[styles.container1, props.style]}>
-      
-        <Text style={styles.temprature}>{props.temp}</Text>
-      
-      
-        <Text style={styles.nickName}>{props.nickname}</Text>
-        
-      
+    <TouchableOpacity style={[styles.container, props.style]}>
+      <View style={styles.rect}>
+        <Text style={styles.temprature}>temprature</Text>
+      </View>
+      <View style={styles.rect2}>
+        <Text style={styles.nickName}>nick name</Text>
+      </View>
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  container1: {
+  container: {
     backgroundColor: "rgba(230, 230, 230,1)",
     flexDirection: "row"
   },
