@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "youtubeexpodemo",
-    "slug": "youtubeexpodemo",
+    "name": "iotnauts",
+    "slug": "iotnauts",
     "privacy": "public",
     "sdkVersion": "36.0.0",
     "platforms": [
@@ -25,6 +25,16 @@
     ],
     "ios": {
       "supportsTablet": true
+    },
+    "android": {
+      "package": "com.yourcompany.yourappname",
+      "versionCode": 1,
+      "config": {
+        "googleSignIn": {
+          "apiKey": "AIzaSyCFdGjEOrt5LNvDXVwW6FbDc0mze-uB3Kw",
+          "certificateHash": "304755933D1580EE8CFD6AB1A7DEC26A0914ED83"
+        }
+      }
     }
   }
 }

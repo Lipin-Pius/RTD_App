@@ -8,8 +8,10 @@ import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
 import * as Permissions from 'expo-permissions';
 const { convertArrayToCSV } = require('convert-array-to-csv');
-
-
+import {Notifications} from 'expo'
+import ToggleSwitch from 'toggle-switch-react-native'
+import Card from '../assets/Components/Card';
+import MaterialButtonDanger from '../assets/Components/MaterialButtonDanger';
 
 
 
@@ -71,50 +73,55 @@ function Role({route, navigation }) {
 
   return null
  
-    /*const [initializing, setInitializing] = useState(true);
-    const [role, setRole] = useState(null);
-    const {userId} = route.params;
-
-   
-    // Subscriber handler
-    function onRoleChange(snapshot) {
-      // Set the role from the snapshot
-      
-      setRole(snapshot.val().locale);
-   
-      // Connection established
-      if (initializing) setInitializing(false);
-    }
-   
-    useEffect(() => {
-      // Create reference
-      const refrole = firebase.database().ref(`/user/${userId}/`);
-   
-      // Subscribe to value changes
-      refrole.on('value', onRoleChange);
-   
-      // Unsubscribe from changes on unmount
-      return () => refrole.off('value', onRoleChange);
-    });
-   
-    // Wait for first connection
-    if (initializing) return null;
-   
-    return (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center'}}>
-        <Text>{role}</Text>
-        </View>
-        
-    );
-    */
+    
   }
 
 function Games({route, navigation }) {
     const [loading, setLoading] = useState(true);
     const [games, setGames] = useState([]);
     const [count, setCount] = useState(1);
+    //const [refresh, setRefresh]= useState(1)
     const uid = firebase.auth().currentUser.uid;
+    var currentUser = firebase.auth().currentUser;
+
+    const refresh = route.params.refresh
+
    
+    async function registerForPushNotificationsAsync() {
+      const { status } = await Permissions.askAsync(Permissions.NOTIFICATIONS);
+      // only asks if permissions have not already been determined, because
+      // iOS won't necessarily prompt the user a second time.
+      // On Android, permissions are granted on app installation, so
+      // `askAsync` will never prompt the user
+    
+      // Stop here if the user did not grant permissions
+      if (status !== 'granted') {
+        alert('No notification permissions!');
+        return;
+      }
+      try{
+      // Get the token that identifies this device
+      let token = await Notifications.getExpoPushTokenAsync();
+    
+      // POST the token to your backend server from where you can retrieve it to send push notifications.
+      firebase
+        .database()
+        .ref('user/' + currentUser.uid + '/push_token')
+        .set(token);
+    } catch (error) {
+      console.log(error);
+    }
+    } 
+    useEffect(() =>{
+      async function mountComponent() {
+
+        currentUser = await firebase.auth().currentUser
+        console.log('current user:', currentUser)
+        await registerForPushNotificationsAsync()
+      }
+      mountComponent()
+    },[])
+    
 
     
 
@@ -190,6 +197,8 @@ function Games({route, navigation }) {
 
 
       }   
+      
+      
 
       return () => {
         
@@ -201,15 +210,16 @@ function Games({route, navigation }) {
         const ref1 = firebase.database().ref(`/user/${uid}/userDevices`)
         ref1.off('value', userDevice);
       }     
-    },[uid]);
+    },[uid,refresh]);
 
     
-
+    var addButtonClick = () =>{
+      navigation.navigate('addDevice')
+    }
     navigation.setOptions({
       headerRight: () => (
-        <Button
-          onPress={() => navigation.navigate('addDevice')}
-          title="add Device +"
+        <MaterialButtonDanger
+          addButtonClick = {addButtonClick}
         />
       ),
     });
@@ -219,14 +229,14 @@ function Games({route, navigation }) {
     }
     
     if (loading) {
-      return <Text>Loading games...</Text>;
+      return <Text>Loading devices...</Text>;
     }
    
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center'}}>
 
     <FlatList data={games} 
-    renderItem={({ item }) => (<FlatList_touchable
+    renderItem={({ item }) => (<Card
     devID = {item.devID}
     temp = {item.temperature}
     nickname = {item.nickname}
@@ -238,42 +248,16 @@ function Games({route, navigation }) {
     )
 }
 
-function FlatList_touchable({ devID,temp, nickname,  onclickDevice }) {
-  return (
-    <TouchableOpacity
-      onPress={() => onclickDevice(devID, nickname)}
-      style={[
-        styles.item,
-      ]}
-    >
-    <Text style={styles.title}>{temp} {nickname}</Text>
-    </TouchableOpacity>
-  );
-}
+
         
 function deviceScreen({route,navigation}){
   const [temp, setTemp] = useState(null);
   const [listLogs, setListLogs] = useState([])
-
+  const [tempLogs, setTempLogs] = useState(1);
   const devID = route.params.devID
   const nickname = route.params.nickname
 
-  var getLogList = async() =>{
-    const dayslist =[]
-    const ref1 = firebase.database().ref(`/rtdStorage/rtdID${devID}/`);
-    const snapshot1 = await ref1.once('value');
-    console.log('snapshot1        :' ,snapshot1.val())
-    console.log('snapshot1        :' ,snapshot1.key)
-    snapshot1.forEach(day =>{
-      dayslist.push({
-        day:day.key
-      }
-      )
-    })
-        
-    console.log('days list                 :', dayslist)
-    setListLogs(dayslist)
-  }
+  
   useEffect(() => {
     const getTemp = (snapshot) => {
       console.log('snapshot inside device screen',snapshot.val().devID)
@@ -283,7 +267,8 @@ function deviceScreen({route,navigation}){
     }
     const ref = firebase.database().ref(`/user/deviceID/num${devID}`);
     ref.on('value', getTemp);
-    getLogList()
+    getLogTemp()
+    
     return () => {
       const ref = firebase.database().ref(`/user/deviceID/num${devID}`);
       ref.off('value', getTemp);
@@ -291,31 +276,244 @@ function deviceScreen({route,navigation}){
 
   },[])
   
-  
-  
-  var onclickLogs = (clickedTitle) =>{
-    console.log('clicked logs title:',clickedTitle ,devID)
-    navigation.navigate('Logs screen',{devID:devID, nickname:nickname, clickedTitle:clickedTitle})
+  var getLogTemp = async() =>{
+    const list1 =[]
+    const ref = firebase.database().ref(`/rtdStorage/rtdID${devID}/fullLogs/`);
+    const snapshot = await ref.once('value');
+    console.log('snapshot                ::::', snapshot.val())
+    snapshot.forEach(time =>{
+      var timestamp = new Date(time.val().timestamp)
+      console.log('timestamp:', timestamp.getFullYear())
+      var year = timestamp.getFullYear()
+      var month = ("0" + (timestamp.getMonth() + 1)).slice(-2)
+      var date = ("0" + timestamp.getDate()).slice(-2)
+      var hours = ("0" + timestamp.getHours()).slice(-2)
+      var minutes = ("0" + timestamp.getMinutes()).slice(-2)
+      var seconds = ("0" + timestamp.getSeconds()).slice(-2)
+
+      list1.push({
+        date: date +'-'+ month +'-'+ year,
+        time: hours +':'+ minutes +':'+ seconds,
+        temperature: time.val().temperature,
+      })
+    })
+    console.log('list 1                          ::::::::',list1)
+    setTempLogs(list1.reverse())
   }
+  saveLogs = async () => {
+    const list =[]
+    
+    const ref = firebase.database().ref(`/rtdStorage/rtdID${devID}/fullLogs/`);
+    const snapshot = await ref.once('value');
+    console.log('snapshot', snapshot.val())
+    snapshot.forEach(time =>{
+      var timestamp = new Date(time.val().timestamp)
+      console.log('timestamp:', timestamp.getFullYear())
+      var year = timestamp.getFullYear()
+      var month = ("0" + (timestamp.getMonth() + 1)).slice(-2)
+      var date = ("0" + timestamp.getDate()).slice(-2)
+      var hours = ("0" + timestamp.getHours()).slice(-2)
+      var minutes = ("0" + timestamp.getMinutes()).slice(-2)
+      var seconds = ("0" + timestamp.getSeconds()).slice(-2)
+
+      list.push({
+        date: date +'-'+ month +'-'+ year,
+        time: hours +':'+ minutes +':'+ seconds,
+        temperature: time.val().temperature,
+      })
+    })
+
+    const csvFromArrayOfObjects = convertArrayToCSV(list);
+    console.log('list:', list)
+    console.log('csv From arr obj:', csvFromArrayOfObjects)
+    const { status } = await Permissions.askAsync(Permissions.CAMERA_ROLL);
+    if (status === "granted") {
+        let fileUri = FileSystem.documentDirectory + "text.csv";
+        await FileSystem.writeAsStringAsync(fileUri, csvFromArrayOfObjects, { encoding: FileSystem.EncodingType.UTF8 });
+        const asset = await MediaLibrary.createAssetAsync(fileUri)
+        await MediaLibrary.createAlbumAsync("Download", asset, false)
+    }
+    //console.log('list logs                  :::::', listLogs)
+  }
+  navigation.setOptions({
+    headerRight: () => (
+      <Button
+        onPress={() => navigation.navigate('Settings',{devID:devID, nickname:nickname})}
+        title="settings"
+      />
+    ),
+  });
+  
+  function  displayFlatlist() {
+    if (Array.isArray(tempLogs)) {
+        return (
+          
+        <FlatList
+          data={tempLogs}
+        renderItem={({item}) => <Text style={styles.item}>{item.date}         {item.time}          {item.temperature}</Text>}
+          keyExtractor={(item, index) => index.toString()}
+        />
+        ) 
+        
+    } else {
+        return <Text> Loading! </Text>;
+    }
+  }
+  function  displayText() {
+    if (Array.isArray(tempLogs)) {
+        return (
+          
+          <Text>        Date                             Time                        temperature</Text>
+        ) 
+        
+    } 
+  }
+  function  displayDloadButton() {
+    if (Array.isArray(tempLogs)) {
+        return (
+          <Button
+          onPress={() => saveLogs()}
+          title="download"
+          />
+          
+        ) 
+        
+    } 
+  }
+  
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center'}}>
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center'}}>
-    <Text>{devID} {nickname} {temp}</Text>
+        <Text>{devID} {nickname} {temp}</Text>
     
     </View>
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center'}}>
-    <FlatList
-          data={listLogs}
-          renderItem={({ item }) => (<FlatList_touchable_1
-            logsTitle = {item.day}
-            onclickLogs = {onclickLogs}
-            />)}
-          keyExtractor={(item, index) => index.toString()}
-        />
+        
+        
+        
+        <View style={{ flex: 2, alignItems: 'center', justifyContent: 'center'}}>
+        {displayDloadButton()}
+        {displayText()}
+        {displayFlatlist()}
+        
+    
     </View>
     </View>
 
   
+  )
+}
+
+function settings({route, navigation}){
+  const [toggleSw, setToggleSw] = useState(true);
+  const [minTemp, setMinTemp] = useState(null);
+  const [maxTemp, setMaxTemp] = useState(null);
+  const [interval, setInterval] = useState('5');
+  const [token, setToken] = useState('');
+  const devID = route.params.devID
+  const nickname = route.params.nickname
+  const uid = firebase.auth().currentUser.uid;
+  const ref3 = firebase.database().ref(`/user/deviceID/num${devID}/linkedUser/${uid}`)
+  const ref2 = firebase.database().ref(`/user/deviceID/num${devID}`)
+  const ref1 = firebase.database().ref(`/user/${uid}/push_token`)
+  function onSettings(snapshot){
+    setMinTemp(snapshot.val().minTemp)
+    setMaxTemp(snapshot.val().maxTemp)
+    setToggleSw(snapshot.val().enableNotification)
+    setInterval(snapshot.val().interval)
+  }
+  function onInterval(snapshot){
+    setInterval(snapshot.val().interval)
+  }
+  function onPushToken(snapshot){
+    setToken(snapshot.val())
+  }
+  
+    useEffect(() => {
+      // Create reference
+      
+      ref3.once('value', onSettings);
+      ref2.once('value', onInterval);
+      ref1.once('value', onPushToken);
+    }, [uid]);
+ 
+
+  notificationRange = (async() =>{
+      await ref3.update({
+        minTemp: minTemp,
+        maxTemp: maxTemp,
+        push_token:token,
+        
+      })
+      await ref2.update({
+        interval: interval
+      })
+  })
+  removeDevice = (async() =>{
+      const ref = firebase.database().ref(`/user/${uid}/userDevices/dev${devID}`);
+      await ref.remove();
+      await ref3.remove();
+
+  })
+  return(
+    //<Text>settings</Text>
+    <View style ={{padding: 10}}>
+
+    <ToggleSwitch
+      isOn={toggleSw}
+      onColor="green"
+      offColor="red"
+      label="Enable Notification"
+      labelStyle={{ color: "black", fontWeight: "900" }}
+      size="large"
+      onToggle={async(isOn) => {
+        console.log("changed to : ", isOn)
+        setToggleSw(isOn)
+        
+        await ref3.update({
+          enableNotification: isOn,
+          push_token:token,
+        })
+      }}
+      />
+      <Text>Enter Minimum temperature</Text> 
+      <TextInput
+          style={{height: 40}}
+          placeholder="minimum temperature"
+          onChangeText={(text) => setMinTemp(text)}
+          value={minTemp}
+      />
+      <Text>Enter Maximum temperature</Text>
+      <TextInput
+          style={{height: 40}}
+          placeholder="maximum temperature here"
+          onChangeText={(text) => setMaxTemp(text)}
+          value={maxTemp}
+      />
+      <Text>Enter Interval for datalogs</Text>
+      <TextInput
+          style={{height: 40}}
+          placeholder="enter interval"
+          onChangeText={(text) => setInterval(text)}
+          value={interval}
+      />
+      <Button
+          onPress={() => notificationRange()}
+          title="set"
+      /> 
+      <Button
+          onPress={() => {
+            removeDevice()
+            .then(() => {
+              navigation.navigate('flatList',{
+                refresh: Date.now(),
+              })
+            })
+          }}
+          title="Remove Device"
+      /> 
+    </View>
+    
+    
   )
 }
 
@@ -431,24 +629,38 @@ function addDevice({route,navigation}){
   },[])
   var addButton = async() => {
     const uid = firebase.auth().currentUser.uid;
+    const tokenRef = firebase.database().ref(`/user/${uid}/push_token`)
+    const snapToken = await tokenRef.once('value')
+    console.log('token', snapToken)
     console.log('addButton pressed', textID, nickname)
     const devRef1 = firebase.database().ref(`/user/deviceID/`);
     const snapshot1 = await devRef1.child(`num${textID}`).once('value');   //to check device existence
     const devRef2 = firebase.database().ref(`/user/${uid}/userDevices`);   
-    const snapshot2 = await devRef2.child(`dev${textID}`).once('value')    //to check if user 
-    console.log('snapshot1:', snapshot1.val())                             //already added device to his device list
+    const snapshot2 = await devRef2.child(`dev${textID}`).once('value')      //to check if user 
+                                                                        //already added device to his device list
+    const ref3 = firebase.database().ref(`/user/deviceID/num${textID}/linkedUser/${uid}`)    
+    console.log('snapshot1:', snapshot1.val())                             
     console.log('snapshot2', snapshot2.val())
     var exists1 = (snapshot1.val() !== null);
     var exists2 = (snapshot2.val() !== null);
     console.log('exists1:', exists1, 'exists2:', exists2)
     if(exists1 !== false && exists2 === false){
+      ref3.set({
+        uid: uid,
+        nickname: nickname,
+        push_token: snapToken.val(),
+        maxTemp: '200',
+        minTemp: '-200',
+        enableNotification: false
+      })
       devRef2.child(`dev${textID}`).update({
         devID: parseInt(textID),
         nickname: nickname,
         timestamp: Date.now(),
-      }).then(() => {
+      })
+      .then(() => {
         navigation.navigate('flatList',{
-          refresh: 1,
+          refresh: Date.now(),
         })
       })
     }
@@ -486,11 +698,14 @@ function addDevice({route,navigation}){
 const Stack = createStackNavigator();
 
 export default function App() {
+
+  
   return (
     <NavigationContainer>
       <Stack.Navigator>
         <Stack.Screen name="flatList" 
           component={Games}
+          initialParams={{ refresh: 42 }}
           options={({ navigation, route }) => ({
             
           })}
@@ -502,6 +717,7 @@ export default function App() {
         
         <Stack.Screen name="addDevice" component={addDevice} />
         <Stack.Screen name="Logs screen" component={logsScreen} />
+        <Stack.Screen name="Settings" component={settings} />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -517,4 +733,5 @@ const styles = StyleSheet.create({
     fontSize: 18,
     height: 44,
   },
+  
 })
